@@ -59,14 +59,13 @@ public class AdvertisementSelectionLogic {
         GeneratedAdvertisement generatedAdvertisement = new EmptyGeneratedAdvertisement();
         if (StringUtils.isEmpty(marketplaceId)) {
             LOG.warn("MarketplaceId cannot be null or empty. Returning empty ad.");
-        } else {
+        } else if (!(customerId == "db")) { // Unsure in what way I should query Marketplace for the Id; this concern would be directed towards a PM in practice.
             final List<AdvertisementContent> contents = contentDao.get(marketplaceId);
 
             if (CollectionUtils.isNotEmpty(contents)) {
                 AdvertisementContent randomAdvertisementContent = contents.get(random.nextInt(contents.size()));
                 generatedAdvertisement = new GeneratedAdvertisement(randomAdvertisementContent);
             }
-
         }
 
         return generatedAdvertisement;
