@@ -5,6 +5,8 @@ import com.amazon.ata.advertising.service.targeting.predicate.TargetingPredicate
 import com.amazon.ata.advertising.service.targeting.predicate.TargetingPredicateResult;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 /**
@@ -12,7 +14,7 @@ import java.util.stream.Stream;
  */
 public class TargetingEvaluator {
     public static final boolean IMPLEMENTED_STREAMS = true;
-    public static final boolean IMPLEMENTED_CONCURRENCY = false;
+    public static final boolean IMPLEMENTED_CONCURRENCY = true;
     private final RequestContext requestContext;
     boolean allTruePredicates = true;
 
@@ -31,16 +33,13 @@ public class TargetingEvaluator {
      * @return TRUE if all of the TargetingPredicates evaluate to TRUE against the RequestContext, FALSE otherwise.
      */
     public TargetingPredicateResult evaluate(TargetingGroup targetingGroup) {
+        ExecutorService executor = Executors.newCachedThreadPool();
+
         List<TargetingPredicate> targetingPredicates = targetingGroup.getTargetingPredicates();
-
-
         Stream<TargetingPredicate> targetingPredicateStream = targetingPredicates.stream();
 
         targetingPredicateStream.forEach((predicate) -> {
-            TargetingPredicateResult predicateResult = predicate.evaluate(requestContext);
-            if (!predicateResult.isTrue()) {
-                strikeFalsePredicates();
-            }
+            executor.submit(evalPredicate(predicate));
         });
 
 
@@ -48,6 +47,14 @@ public class TargetingEvaluator {
 
         return allTruePredicates ? TargetingPredicateResult.TRUE :
                                    TargetingPredicateResult.FALSE;
+    }
+
+    private Runnable evalPredicate(TargetingPredicate predicate) {
+        TargetingPredicateResult predicateResult = predicate.evaluate(requestContext);
+        if (!predicateResult.isTrue()) {
+            strikeFalsePredicates();
+        }
+        return null;
     }
 
     private void strikeFalsePredicates() {
