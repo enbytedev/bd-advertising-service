@@ -4,9 +4,12 @@ import com.amazon.ata.advertising.service.dao.ReadableDao;
 import com.amazon.ata.advertising.service.model.AdvertisementContent;
 import com.amazon.ata.advertising.service.model.EmptyGeneratedAdvertisement;
 import com.amazon.ata.advertising.service.model.GeneratedAdvertisement;
+import com.amazon.ata.advertising.service.model.RequestContext;
+import com.amazon.ata.advertising.service.targeting.TargetingEvaluator;
 import com.amazon.ata.advertising.service.targeting.TargetingGroup;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,14 +60,29 @@ public class AdvertisementSelectionLogic {
      */
     public GeneratedAdvertisement selectAdvertisement(String customerId, String marketplaceId) {
         GeneratedAdvertisement generatedAdvertisement = new EmptyGeneratedAdvertisement();
+
         if (StringUtils.isEmpty(marketplaceId)) {
             LOG.warn("MarketplaceId cannot be null or empty. Returning empty ad.");
-        } else if (!(customerId == "db")) { // Unsure in what way I should query Marketplace for the Id; this concern would be directed towards a PM in practice.
+        } else {
+            final RequestContext requestContext = new RequestContext(customerId, marketplaceId);
+            final TargetingEvaluator targetingEvaluator = new TargetingEvaluator(requestContext);
+            final Comparator<TargetingGroup> comparator = Comparator.comparingDouble(TargetingGroup::getClickThroughRate).reversed();
             final List<AdvertisementContent> contents = contentDao.get(marketplaceId);
+            final SortedMap<TargetingGroup, AdvertisementContent> contentsTree = new TreeMap<>(comparator);
 
-            if (CollectionUtils.isNotEmpty(contents)) {
-                AdvertisementContent randomAdvertisementContent = contents.get(random.nextInt(contents.size()));
-                generatedAdvertisement = new GeneratedAdvertisement(randomAdvertisementContent);
+            for (AdvertisementContent content : contents) {
+                List<TargetingGroup> targetingGroups = targetingGroupDao.get(content.getContentId());
+                targetingGroups.stream()
+                        .sorted(comparator)
+                        .filter(targetingGroup -> targetingEvaluator.evaluate(targetingGroup).isTrue())
+                        .findFirst()
+                        .ifPresent(targetingGroup -> contentsTree.put(targetingGroup, content));
+            }
+
+            if (MapUtils.isNotEmpty(contentsTree)) {
+                final TargetingGroup firstKey = contentsTree.firstKey();
+                final AdvertisementContent firstAdContent = contentsTree.get(firstKey);
+                generatedAdvertisement = new GeneratedAdvertisement(firstAdContent);
             }
         }
 

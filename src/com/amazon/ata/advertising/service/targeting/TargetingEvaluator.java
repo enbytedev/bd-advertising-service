@@ -42,9 +42,6 @@ public class TargetingEvaluator {
             executor.submit(evalPredicate(predicate));
         });
 
-
-
-
         return allTruePredicates ? TargetingPredicateResult.TRUE :
                                    TargetingPredicateResult.FALSE;
     }
